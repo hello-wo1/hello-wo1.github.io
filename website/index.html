@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartWatt</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="manifest" href="/manifest.json">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Dosis:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Dosis', sans-serif;
+            padding-top: 56px;
+        }
+        .dashboardInsightDanger {
+            background-color: #f8d7da;
+        }
+        .dashboardInsightWarning {
+            background-color: #fff3cd;
+        }
+        .scan-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 250px;
+            height: 250px;
+            border: 4px solid #fff;
+            border-radius: 20px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            pointer-events: none;
+        }
+        .nav-bottom {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            z-index: 1000;
+            background: white;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+        }
+        .header-top {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            z-index: 1000;
+        }
+        .page-content {
+            display: none;
+            padding: 20px;
+        }
+        .active-page {
+            display: block;
+        }
+        .payment-logo {
+            width: 40px;
+            margin-right: 10px;
+        }
+        .nav-link {
+            cursor: pointer;
+        }
+        .expandable-card {
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        .fullscreen-card {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 2000;
+            background: white;
+            overflow-y: auto;
+        }
+        .dot-flashing {
+            position: relative;
+            width: 10px;
+            height: 10px;
+            border-radius: 5px;
+            background-color: #28a745;
+            color: #28a745;
+            animation: dotFlashing 1s infinite linear;
+        }
+        @keyframes dotFlashing {
+            0% { background-color: #28a745; }
+            50%, 100% { background-color: #e6f4ea; }
+        }
+
+        /* Scan Notification Styles */
+        .scan-notification {
+            overflow: hidden;
+            transition: height 0.5s ease;
+            background: white;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .scan-notification.show {
+            height: 100px;
+        }
+        .scan-notification.hide {
+            height: 0;
+        }
+        .dashboardNotificationContent {
+            padding: 1rem;
+        }
+        .progress-spinner {
+            width: 40px;
+            height: 40px;
+            margin: 10px auto;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #dashboardNotificationText {
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        #payment-checkout {
+            position: fixed;
+            bottom: 78px;
+            left: 0;
+            right: 0;
+            background: white;
+            padding: 15px 20px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+        }
+        #payment-result {
+            display: none;
+            top: 50%;
+        }
+    </style>
+</head>
+<body onload="uploadData();">
+    <nav class="navbar navbar-dark bg-primary header-top py-2">
+        <div class="container-fluid d-flex align-items-center">
+            <!-- Logo Section -->
+            <span class="navbar-brand mb-0 h1 gap-2 d-flex align-items-center">
+                <img src="logo-1024.svg" height="28" class="d-inline-block align-middle" alt="Logo">
+                <span class="fs-4">SmartWatt</span>
+            </span>
+    
+            <!-- Install Button -->
+            <div class="d-flex align-items-center">
+                <button id="install-button" class="btn btn-light py-1 px-3" style="display: none;">
+                    <i class="bi bi-download fs-5"></i>
+                    <span class="d-none d-sm-inline ms-2 fs-5">Install</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Pages -->
+    <div id="page1" class="page-content active-page">
+        <div class="scan-notification hide mb-3" id="scanNotification">
+            <div class="dashboardNotificationContent">
+                <div id="dashboardNotificationText">Uploading...</div>
+                <div class="progress-spinner"></div>
+            </div>
+        </div>
+        <div class="container" style="padding-bottom: 96px;">
+            <div class="row g-4 mb-4">
+                <!-- Real-time Stats -->
+                <div class="col-md-4">
+                    <div class="card consumption-card">
+                        <div class="card-body text-center">
+                            <h5><i class="bi bi-lightning-charge text-warning"></i> Current Usage</h5>
+                            <h2 class="display-4">2.4 kW</h2>
+                            <p class="text-muted">≈ $0.18/hr</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h5><i class="bi bi-currency-dollar text-success"></i> Daily Cost</h5>
+                            <h2 class="display-4">$4.32</h2>
+                            <p class="text-muted">12 kWh today</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h5><i class="bi bi-globe text-primary"></i> Carbon Footprint</h5>
+                            <h2 class="display-4">18 kg</h2>
+                            <p class="text-muted">CO₂ today</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                <!-- Energy Chart -->
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header" id="dashboardGraphTitle">Energy Consumption</div>
+                        <div class="card-body">
+                            <canvas id="consumptionChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Insights -->
+                <div class="col-lg-4">
+                    <div class="card alert-card">
+                        <div class="card-header">Insights</div>
+                        <div class="card-body">
+                            <div class="list-group">
+                                <a class="list-group-item dashboardInsightDanger">
+                                    <i class="bi bi-exclamation-octagon text-danger me-2"></i>
+                                    System Overload Detected! Load Disconnected
+                                </a>
+                                <a class="list-group-item dashboardInsightWarning">
+                                    <i class="bi bi-exclamation-triangle text-warning me-2"></i>
+                                    High Usage Detected: 12kW peak
+                                </a>
+                                <a class="list-group-item list-group-item-action">
+                                    <i class="bi bi-lightbulb text-primary me-2"></i>
+                                    Peak-hours: switch off to save 12%
+                                </a>
+                                <a class="list-group-item list-group-item-action">
+                                    <i class="bi bi-check-circle text-success me-2"></i>
+                                    Electricity Meter Is Online
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="page2" class="page-content">
+        <div class="position-relative">
+            <video id="preview" class="w-100" style="height: calc(100vh - 130px); object-fit: cover;"></video>
+            <div class="scan-overlay"></div>
+        </div>
+        <div id="scan-result" class="container mt-3" style="display: none;"></div>
+    </div>
+
+    <div id="page3" class="page-content">
+        <div class="container" style="padding-bottom: 216px;">
+            <div id="payment-result" class="my-4"></div>
+
+            <div id="payment-option">
+                <h5 class="mt-3">Payment method:</h5>
+                <div class="btn-group w-100 mb-3" role="group">
+                    <button type="button" 
+                            class="btn btn-outline-primary flex-grow-1" 
+                            data-payment-type="pre-payment"
+                            onclick="togglePayment(this, 'pre-payment')">
+                        Pre-payment
+                    </button>
+                    <button type="button" 
+                            class="btn btn-outline-primary flex-grow-1" 
+                            data-payment-type="pay-as-you-go"
+                            onclick="togglePayment(this, 'pay-as-you-go')">
+                        Pay-as-you-go
+                    </button>
+                </div>
+
+                <div class="mb-3" id="payment-input"></div>
+            
+                <div class="list-group mb-0">
+                    <div class="list-group-item">
+                        <input class="form-check-input me-2" type="radio" name="payment" value="FPS" checked onchange="updatePayButton()">
+                        <img src="https://miro.medium.com/v2/resize:fit:720/format:webp/1*eKZ-IVjg4CXq3Ax4iCtQPw.png" class="payment-logo"> FPS
+                    </div>
+                    <div class="list-group-item">
+                        <input class="form-check-input me-2" type="radio" name="payment" value="Octopus" onchange="updatePayButton()">
+                        <img src="https://upload.wikimedia.org/wikipedia/en/a/ae/Octopus_Logo_%282017%29.png" class="payment-logo"> Octopus
+                    </div>
+                    <div class="list-group-item">
+                        <input class="form-check-input me-2" type="radio" name="payment" value="PayMe" onchange="updatePayButton()">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/4/4c/PayMe_from_HSBC_wordmark.svg" class="payment-logo"> PayMe
+                    </div>
+                    <div class="list-group-item">
+                        <input class="form-check-input me-2" type="radio" name="payment" value="Alipay" onchange="updatePayButton()">
+                        <img src="https://www.logo.wine/a/logo/Alipay/Alipay-Logo.wine.svg" class="payment-logo"> Alipay
+                    </div>
+                    <div class="list-group-item">
+                        <input class="form-check-input me-2" type="radio" name="payment" value="WeChat Pay" onchange="updatePayButton()">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/7/7a/WeChat_Pay.png" class="payment-logo"> WeChat Pay
+                    </div>
+                    <div class="list-group-item">
+                        <input class="form-check-input me-2" type="radio" name="payment" value="PayPal" onchange="updatePayButton()">
+                        <img src="https://www.paypalobjects.com/webstatic/mktg/logo/pp_cc_mark_37x23.jpg" class="payment-logo"> PayPal
+                    </div>
+                    <div class="list-group-item">
+                        <input class="form-check-input me-2" type="radio" name="payment" value="Mastercard" onchange="updatePayButton()">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/2/2a/Mastercard-logo.svg" class="payment-logo"> Mastercard
+                    </div>
+                    <div class="list-group-item">
+                        <input class="form-check-input me-2" type="radio" name="payment" value="Visa" onchange="updatePayButton()">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/5/5e/Visa_Inc._logo.svg" class="payment-logo"> Visa
+                    </div>
+                    <div class="list-group-item">
+                        <input class="form-check-input me-2" type="radio" name="payment" value="UnionPay" onchange="updatePayButton()">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/1/1b/UnionPay_logo.svg" class="payment-logo"> UnionPay
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="payment-checkout">
+            <div id="total-section" class="d-flex justify-content-between align-items-center mb-2">
+                <div>
+                </div>
+                <h3 class="mb-0">Total: --</h3>
+            </div>
+            <button id="pay-button" class="btn btn-success w-100 py-3" 
+                    onclick="handlePayment()">Pay with FPS</button>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <nav class="nav-bottom">
+        <ul class="nav nav-pills justify-content-center py-2 row w-100 m-0">
+            <li class="nav-item col-4 px-0">
+                <a class="nav-link active text-center p-3 fs-5" onclick="showPage(1, this)">
+                    <i class="bi bi-bar-chart"></i>
+                    <span class="d-none d-sm-inline">Dashboard</span>
+                </a>
+            </li>
+            <li class="nav-item col-4 px-0">
+                <a class="nav-link text-center p-3 fs-5" onclick="showPage(2, this)">
+                    <i class="bi bi-qr-code-scan"></i>
+                    <span class="d-none d-sm-inline">Scan</span>
+                </a>
+            </li>
+            <li class="nav-item col-4 px-0">
+                <a class="nav-link text-center p-3 fs-5" onclick="showPage(3, this)">
+                    <i class="bi bi-credit-card"></i>
+                    <span class="d-none d-sm-inline">Payment</span>
+                </a>
+            </li>
+        </ul>
+    </nav>  
+
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/@zxing/library@0.18.6/umd/index.min.js"></script>
+    <script>
+        let currentPage = 1;
+        let codeReader;
+        let deferredPrompt;
+        let isFullscreen = false;
+        let electricityInfoContent;
+        let paymentPrePay = -29.50;
+        let paymentNowPay = 29.50;
+        let tempNum = 0;
+        let consumptionChart;
+        let peakHoursString = '';
+        let timeRangeString = '';
+
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-app.js";
+        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-database.js";
+
+        // PWA Install Button Logic
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            document.getElementById('install-button').style.display = 'block';
+        });
+
+        document.getElementById('install-button').addEventListener('click', () => {
+            deferredPrompt.prompt();
+            deferredPrompt.userChoice.then((choiceResult) => {
+                if (choiceResult.outcome === 'accepted') {
+                    console.log('User accepted the install prompt');
+                }
+                deferredPrompt = null;
+                document.getElementById('install-button').style.display = 'none';
+            });
+        });
+
+        window.addEventListener('appinstalled', () => {
+            document.getElementById('install-button').style.display = 'none';
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const ctx = document.getElementById('consumptionChart');
+            
+            consumptionChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Array.from({length: 24}, (_, i) => `${i}:00`),
+                    datasets: [{
+                        label: 'Energy Consumption (kWh)',
+                        data: [],
+                        backgroundColor: [],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: true },
+                        tooltip: { enabled: true },
+                        // title: {
+                        //     display: true,
+                        //     position: 'top'
+                        // }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'kWh' }
+                        }
+                    }
+                }
+            });
+
+            fetch('power_consumption.csv')
+                .then(response => response.text())
+                .then(csvText => {
+                    const rows = csvText.trim().split('\n');
+                    const header = rows.shift().split(';');
+                    
+                    let lastDate = null;
+                    const hourlyConsumption = new Array(24).fill(0);
+                    let minTime = null;
+                    let maxTime = null;
+                    let fetchedDate = '';
+
+                    // First pass: Find latest date
+                    rows.forEach(row => {
+                        const cells = row.split(';');
+                        if (cells.length < 9) return;
+                        const [d, m, y] = cells[0].split('/').map(Number);
+                        const currentDate = new Date(y, m-1, d);
+                        if (!lastDate || currentDate > lastDate) {
+                            lastDate = currentDate;
+                            fetchedDate = cells[0];
+                        }
+                    });
+
+                    // Second pass: Process data and track times
+                    rows.forEach(row => {
+                        const cells = row.split(';');
+                        if (cells.length < 9 || cells[0] !== fetchedDate) return;
+
+                        // Parse datetime
+                        const [day, month, year] = cells[0].split('/').map(Number);
+                        const [h, m, s] = cells[1].split(':').map(Number);
+                        const currentDateTime = new Date(year, month-1, day, h, m, s);
+
+                        // Update time range
+                        if (!minTime || currentDateTime < minTime) minTime = currentDateTime;
+                        if (!maxTime || currentDateTime > maxTime) maxTime = currentDateTime;
+
+                        // Aggregate consumption
+                        const power = parseFloat(cells[2]);
+                        const hour = h;
+                        if (!isNaN(hour) && !isNaN(power)) {
+                            hourlyConsumption[hour] += power * (1/60);
+                        }
+                    });
+
+                    // Find peak hours
+                    const maxConsumption = Math.max(...hourlyConsumption);
+                    const peakHours = hourlyConsumption
+                        .map((v, i) => v === maxConsumption ? i : null)
+                        .filter(v => v !== null);
+
+                    // Format time range
+                    const formatTime = (date, includeDate) => {
+                        const pad = n => String(n).padStart(2, '0');
+                        const datePart = includeDate
+                            ? `${pad(date.getDate())}/${pad(date.getMonth()+1)}/${date.getFullYear()} `
+                            : ``;
+                        const timePart = `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+                        return `${datePart}${timePart}`;
+                    };
+
+                    // Usage example (with the boolean parameter):
+                    const timeRange = `${formatTime(minTime, true)} - ${formatTime(maxTime, false)}`;
+
+                    // Create color array
+                    const backgroundColors = hourlyConsumption.map((v, hour) => 
+                        peakHours.includes(hour) 
+                            ? 'rgba(246, 241, 160, 1.0)'  // Red for peaks
+                            : 'rgba(54, 162, 235, 0.5)'  // Blue for normal
+                    );
+
+                    // Update chart
+                    consumptionChart.data.datasets[0].data = hourlyConsumption;
+                    consumptionChart.data.datasets[0].backgroundColor = backgroundColors;
+
+                    // consumptionChart.options.plugins.title = {
+                    //     display: true,
+                    //     text: [
+                    //         `Peak Hours: ${peakHours.map(h => `${h}:00`).join(', ')}`,
+                    //         `Time Range: ${timeRange}`
+                    //     ]
+                    // };
+                    peakHoursString = peakHours.map(h => `${h}:00`).join(', ');
+                    timeRangeString = timeRange;
+
+                    consumptionChart.update();
+                })
+                .catch(error => console.error('Error:', error));
+
+            const checkElementExistence = setInterval(() => {
+                if (document.getElementById('dashboardGraphTitle')) {
+                    console.log('Element exists!');
+                    document.getElementById('dashboardGraphTitle').innerText += `:\n${timeRangeString}`;
+                    clearInterval(checkElementExistence);
+                } else {
+                    console.log('Element does not exist yet...');
+                }
+            }, 100); // Check every 100 milliseconds
+
+        });
+
+        function showPage(pageNumber, linkElement) {
+            document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+            linkElement.classList.add('active');
+            
+            document.querySelector('.active-page').classList.remove('active-page');
+            document.getElementById(`page${pageNumber}`).classList.add('active-page');
+            
+            if (pageNumber === 2) {
+                startScanner();
+            } else if (codeReader) {
+                codeReader.reset();
+                document.getElementById('preview').style.display = 'block';
+                document.getElementById('scan-result').style.display = 'none';
+            }
+        }
+
+        function startScanner() {
+            if (codeReader) {
+                codeReader.reset();
+            }
+            codeReader = new ZXing.BrowserMultiFormatReader();
+            const videoElement = document.getElementById('preview');
+            const constraints = {
+                video: {
+                    facingMode: 'environment',
+                    width: { min: 1280, ideal: 1920, max: 2560 },
+                    height: { min: 720, ideal: 1080, max: 1440 },
+                    aspectRatio: { ideal: 1.777 } // 16:9 aspect ratio
+                }
+            };
+            const hints = {
+                [ZXing.DecodeHintType.TRY_HARDER]: true,
+                [ZXing.DecodeHintType.POSSIBLE_FORMATS]: [ZXing.BarcodeFormat.QR_CODE],
+            };
+            codeReader.decodeFromConstraints(constraints, videoElement, (result, err) => {
+                if (result) {
+                    codeReader.reset();
+                    showPage(1, document.querySelector('.nav-link'));
+                    showScanNotification(result.text);
+                }
+                if (err && !(err instanceof ZXing.NotFoundException)) {
+                    console.error(err);
+                }
+            }, hints).catch(err => {
+                console.error('Error starting scanner:', err);
+            });
+        }
+
+        function showScanNotification(scannedText) {
+            const notification = document.getElementById('scanNotification');
+            const dashboardNotificationText = document.getElementById('dashboardNotificationText');
+            const progressSpinner = document.querySelector('.progress-spinner');
+            
+            // Reset notification state
+            dashboardNotificationText.innerHTML = `Uploading ${scannedText}...`;
+            progressSpinner.style.display = 'block';
+            
+            // Show notification
+            setTimeout(() => {
+                notification.classList.remove('hide');
+                notification.classList.add('show');
+            }, 500); // Match transition duration
+            
+            setTimeout(() => {
+                // Update to success state after 3 seconds
+                dashboardNotificationText.innerHTML = '<br><i class="bi bi-check-circle-fill text-success me-2"></i>Finish!';
+                progressSpinner.style.display = 'none';
+            }, 3000);
+
+            setTimeout(() => {
+                // Hide notification after total 7 seconds
+                notification.classList.remove('show');
+                notification.classList.add('hide');
+                
+                // Reset notification content after animation
+                setTimeout(() => {
+                    dashboardNotificationText.innerHTML = 'Uploading...';
+                    progressSpinner.style.display = 'block';
+                }, 500); // Match transition duration
+            }, 7000);
+        }
+
+        // Payment functions
+        function togglePayment(button, type) {
+            document.querySelectorAll('[data-payment-type]').forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+            
+            const paymentArea = document.getElementById('payment-input');
+            if (type === 'pre-payment') {
+                paymentArea.innerHTML = '<input type="number" class="form-control form-control-lg" placeholder="Amount in HKD$">';
+                input = paymentArea.querySelector('input').value;
+                if (input != '') {
+                    input = Math.floor(Number(input) * 100) / 100;
+                } else {
+                    input = 0;
+                }
+                tempNum = paymentPrePay + input;
+                document.getElementById('total-section').innerHTML = `
+                    <div>
+                        <div class="text-muted small">Current Balance: $${paymentPrePay.toFixed(2)}</div>
+                        <div class="text-muted small">New Balance: $${tempNum.toFixed(2)}</div>
+                    </div>
+                    <h3 class="mb-0">Total: $${input.toFixed(2)}</h3>
+                `;
+                paymentArea.querySelector('input').addEventListener('input', () => {
+                    input = paymentArea.querySelector('input').value;
+                    input = Math.floor(Number(input) * 100) / 100;
+                    tempNum = paymentPrePay + input;
+                    document.getElementById('total-section').innerHTML = `
+                        <div>
+                            <div class="text-muted small">Current Balance: $${paymentPrePay.toFixed(2)}</div>
+                            <div class="text-muted small">New Balance: $${tempNum.toFixed(2)}</div>
+                        </div>
+                        <h3 class="mb-0">Total: $${input.toFixed(2)}</h3>
+                    `;
+                });
+            } else {
+                paymentArea.innerHTML = `<div class="display-1 text-center">$${paymentNowPay.toFixed(2)}</div>`;
+                document.getElementById('total-section').innerHTML = `
+                    <div>
+                    </div>
+                    <h3 class="mb-0">Total: $${paymentNowPay.toFixed(2)}</h3>
+                `;
+            }
+        }
+
+        async function handlePayment() {
+            const paymentArea = document.getElementById('payment-result');
+            const originalContent = paymentArea.innerHTML;
+            const method = document.querySelector('input[name="payment"]:checked').value;
+
+            document.getElementById('payment-option').style.display = 'none';
+            document.getElementById('payment-checkout').style.display = 'none';
+            paymentArea.style.display = "block";
+
+            paymentArea.innerHTML = `
+                <div class="text-center py-5">
+                    <h4 class="mt-3 d-flex align-items-center justify-content-center">
+                        <div class="dot-flashing me-2"></div> Processing payment with ${method}...
+                    </h4>
+                </div>
+            `;
+            
+            setTimeout(() => {
+                paymentArea.innerHTML = `
+                    <div class="text-center py-5">
+                        <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+                        <h2 class="mt-3">Payment Successful!</h2>
+                        <button class="btn btn-secondary mt-3" onclick="resetPaymentPage()">
+                            <i class="bi bi-arrow-left"></i> Back to Payments
+                        </button>
+                    </div>
+                `;
+            }, 5000);
+        }
+
+        function updatePayButton() {
+            const method = document.querySelector('input[name="payment"]:checked').value;
+            document.getElementById('pay-button').textContent = `Pay with ${method}`;
+        }
+
+        function resetPaymentPage() {
+            document.getElementById('payment-result').style.display = 'none';
+            document.getElementById('payment-option').style.display = 'block';
+            document.getElementById('payment-checkout').style.display = 'block';
+            togglePayment(document.querySelector('[data-payment-type="pre-payment"]'), 'pre-payment');
+            updatePayButton();
+        }
+
+        function uploadData() {
+            const firebaseConfig = {
+            apiKey: "AIzaSyAzoj-EGSyjhctXm7H6VhZQkPXpfx1MwE4",
+            authDomain: "project-5399799771103896588.firebaseapp.com",
+            databaseURL: "https://project-5399799771103896588-default-rtdb.firebaseio.com",
+            projectId: "project-5399799771103896588",
+            storageBucket: "project-5399799771103896588.firebasestorage.app",
+            messagingSenderId: "159455371624",
+            appId: "1:159455371624:web:a9df800233b6c04da2f6dd",
+            measurementId: "G-LCD6Q3BE52"
+            };
+        
+            // 初始化 Firebase
+            const app = initializeApp(firebaseConfig);
+            // 获取 Realtime Database 的引用
+            const database = getDatabase(app);
+        
+            // 监听 'sensor_readings' 节点的数据变化
+            const sensorReadingsRef = ref(database, 'sensor_readings');
+            onValue(sensorReadingsRef, (snapshot) => {
+            const data = snapshot.val();
+            console.log("Realtime Database data:", data);
+            // 在这里你可以根据 data 更新页面上的图表或其它元素
+            });
+        }
+
+        let originalPaymentContent = document.querySelector('#page3 .container').innerHTML;
+    </script>
+
+</body>
+</html>
